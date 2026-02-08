@@ -22,7 +22,7 @@ class Config:
     FORCE_SUB_IMAGE = "https://i.ibb.co/pr2H8cwT/img-8312532076.jpg"
     
     # Welcome Image API
-    WELCOME_IMAGE_API = "https://api.aniwallpaper.workers.dev/random?type=girl"
+    WELCOME_IMAGE_API = "https://i.ibb.co/DgrswcPP/img-8108646188.jpg"
     
     # Download Limits (in bytes)
     FREE_LIMIT = int(environ.get("FREE_LIMIT", str(2 * 1024 * 1024 * 1024)))  # 2GB
