@@ -20,7 +20,18 @@ class Database:
                 "joined_date": datetime.datetime.now(pytz.timezone("Asia/Kolkata")),
                 "expiry_time": None,
                 "downloads": 0,
-                "total_data": 0
+                "total_data": 0,
+                # New fields for settings
+                "timezone": "Asia/Kolkata",
+                "thumbnail": None,
+                "spoiler_effect": False,
+                "show_rename": True,
+                "upload_as_doc": True,
+                "receive_screenshots": True,
+                "bot_updates": True,
+                "metadata": {},
+                "awaiting_metadata": False,
+                "awaiting_rename": False
             })
         return False
 
