@@ -1,289 +1,244 @@
-import pytz
 import datetime
-from Script import script 
-from config import config
-from utils import get_seconds
-from database.users_chats_db import db 
+import time
+import os
 import asyncio
-from pyrogram import Client, filters 
+import logging
+from pyrogram import Client, filters, enums
 from pyrogram.errors.exceptions.bad_request_400 import MessageTooLong
-from pyrogram.types import *
+from pyrogram.errors import FloodWait
+from database.users_chats_db import db
+from config import config
+from utils import users_broadcast, groups_broadcast, temp, get_readable_time, clear_junk, junk_group
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
+lock = asyncio.Lock()
 
-@Client.on_message(filters.command("remove_premium") & filters.user(config.ADMINS))
-async def remove_premium(client, message):
-    if len(message.command) == 2:
-        user_id = int(message.command[1])
-        user = await client.get_users(user_id)
-        if await db.remove_premium_access(user_id):
-            await message.reply_text("ᴜꜱᴇʀ ʀᴇᴍᴏᴠᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ !")
-            await client.send_message(
-                chat_id=user_id,
-                text=script.PREMIUM_END_TEXT.format(user.mention)
-            )
-        else:
-            await message.reply_text("ᴜɴᴀʙʟᴇ ᴛᴏ ʀᴇᴍᴏᴠᴇ ᴜꜱᴇᴅ !\nᴀʀᴇ ʏᴏᴜ ꜱᴜʀᴇ, ɪᴛ ᴡᴀꜱ ᴀ ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀ ɪᴅ ?")
-    else:
-        await message.reply_text("ᴜꜱᴀɢᴇ : /remove_premium user_id") 
+@Client.on_callback_query(filters.regex(r'^broadcast_cancel'))
+async def broadcast_cancel(bot, query):
+    _, target = query.data.split("#", 1)
+    if target == 'users':
+        temp.B_USERS_CANCEL = True
+        await query.message.edit("🛑 ᴛʀʏɪɴɢ ᴛᴏ ᴄᴀɴᴄᴇʟ ᴜꜱᴇʀꜱ ʙʀᴏᴀᴅᴄᴀꜱᴛɪɴɢ...")
+    elif target == 'groups':
+        temp.B_GROUPS_CANCEL = True
+        await query.message.edit("🛑 ᴛʀʏɪɴɢ ᴛᴏ ᴄᴀɴᴄᴇʟ ɢʀᴏᴜᴘꜱ ʙʀᴏᴀᴅᴄᴀꜱᴛɪɴɢ...")
 
-
-@Client.on_message(filters.command("myplan"))
-async def myplan(client, message):
-    try:
-        user = message.from_user.mention
-        user_id = message.from_user.id
-        data = await db.get_user(user_id)
-
-        if data and data.get("expiry_time"):
-            expiry = data.get("expiry_time")
-            expiry_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata"))
-            expiry_str_in_ist = expiry_ist.strftime("%d-%m-%Y\n⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : %I:%M:%S %p")
-
-            current_time = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
-            time_left = expiry_ist - current_time
-            days = time_left.days
-            hours, remainder = divmod(time_left.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            time_left_str = f"{days} ᴅᴀʏꜱ, {hours} ʜᴏᴜʀꜱ, {minutes} ᴍɪɴᴜᴛᴇꜱ"
-
-            caption = (
-                f"⚜️ <b>ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀ ᴅᴀᴛᴀ :</b>\n\n"
-                f"👤 <b>ᴜꜱᴇʀ :</b> {user}\n"
-                f"⚡ <b>ᴜꜱᴇʀ ɪᴅ :</b> <code>{user_id}</code>\n"
-                f"⏰ <b>ᴛɪᴍᴇ ʟᴇꜰᴛ :</b> {time_left_str}\n"
-                f"⌛️ <b>ᴇxᴘɪʀʏ ᴅᴀᴛᴇ :</b> {expiry_str_in_ist}"
-            )
-
-            await message.reply_photo(
-                photo=config.SUBSCRIPTION, 
-                caption=caption,
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔥 ᴇxᴛᴇɴᴅ ᴘʟᴀɴ", callback_data="premium_info")]]
-                )
-            )
-        else:
-            await message.reply_photo(
-                photo="https://i.ibb.co/gMrpRQWP/photo-2025-07-09-05-21-32-7524948058832896004.jpg", 
-                caption=(
-                    f"<b>ʜᴇʏ {user},\n\n"
-                    f"ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀɴ ᴀᴄᴛɪᴠᴇ ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴ.\n"
-                    f"ʙᴜʏ ᴏᴜʀ ꜱᴜʙꜱᴄʀɪᴘᴛɪᴏɴ ᴛᴏ ᴇɴᴊᴏʏ ᴘʀᴇᴍɪᴜᴍ ʙᴇɴᴇꜰɪᴛꜱ.</b>"
-                ),
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("💎 ᴄʜᴇᴄᴋᴏᴜᴛ ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴꜱ", callback_data='premium_info')]]
-                )
-            )
-    except Exception as e:
-        print(e)
-
-@Client.on_message(filters.command("get_premium") & filters.user(config.ADMINS))
-async def get_premium(client, message):
-    if len(message.command) == 2:
-        user_id = int(message.command[1])
-        user = await client.get_users(user_id)
-        data = await db.get_user(user_id)  
-        if data and data.get("expiry_time"):
-            expiry = data.get("expiry_time") 
-            expiry_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata"))
-            expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y\n⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : %I:%M:%S %p")            
-            current_time = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
-            time_left = expiry_ist - current_time
-            days = time_left.days
-            hours, remainder = divmod(time_left.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            time_left_str = f"{days} days, {hours} hours, {minutes} minutes"
-            await message.reply_text(f"⚜️ ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀ ᴅᴀᴛᴀ :\n\n👤 ᴜꜱᴇʀ : {user.mention}\n⚡ ᴜꜱᴇʀ ɪᴅ : <code>{user_id}</code>\n⏰ ᴛɪᴍᴇ ʟᴇꜰᴛ : {time_left_str}\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}")
-        else:
-            await message.reply_text("ɴᴏ ᴀɴʏ ᴘʀᴇᴍɪᴜᴍ ᴅᴀᴛᴀ ᴏꜰ ᴛʜᴇ ᴡᴀꜱ ꜰᴏᴜɴᴅ ɪɴ ᴅᴀᴛᴀʙᴀꜱᴇ !")
-    else:
-        await message.reply_text("ᴜꜱᴀɢᴇ : /get_premium user_id")
-
-@Client.on_message(filters.command("add_premium") & filters.user(config.ADMINS))
-async def give_premium_cmd_handler(client, message):
-    if len(message.command) == 4:
-        time_zone = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
-        current_time = time_zone.strftime("%d-%m-%Y\n⏱️ ᴊᴏɪɴɪɴɢ ᴛɪᴍᴇ : %I:%M:%S %p") 
-        user_id = int(message.command[1])  
-        user = await client.get_users(user_id)
-        time = message.command[2]+" "+message.command[3]
-        seconds = await get_seconds(time)
-        if seconds > 0:
-            expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-            user_data = {"id": user_id, "expiry_time": expiry_time}  
-            await db.update_user(user_data) 
-            data = await db.get_user(user_id)
-            expiry = data.get("expiry_time")   
-            expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y\n⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : %I:%M:%S %p")         
-            await message.reply_text(f"ᴘʀᴇᴍɪᴜᴍ ᴀᴅᴅᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅\n\n👤 ᴜꜱᴇʀ : {user.mention}\n⚡ ᴜꜱᴇʀ ɪᴅ : <code>{user_id}</code>\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True)
-            await client.send_message(
-                chat_id=user_id,
-                text=f"👋 ʜᴇʏ {user.mention},\nᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\nᴇɴᴊᴏʏ !! ✨🎉\n\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True              
-            )    
-            if config.PREMIUM_LOGS:
-                await client.send_message(config.PREMIUM_LOGS, text=f"#Added_Premium\n\n👤 ᴜꜱᴇʀ : {user.mention}\n⚡ ᴜꜱᴇʀ ɪᴅ : <code>{user_id}</code>\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True)
-                    
-        else:
-            await message.reply_text(
-                "❌ ɪɴᴠᴀʟɪᴅ ᴛɪᴍᴇ ꜰᴏʀᴍᴀᴛ ❗\n"
-                "🕒 ᴘʟᴇᴀsᴇ ᴜsᴇ: <code>1 day</code>, <code>1 hour</code>, <code>1 min</code>, <code>1 month</code>, or <code>1 year</code>"
-            )
-    else:
-        await message.reply_text(
-            "📌 ᴜsᴀɢᴇ: <code>/add_premium user_id time</code>\n"
-            "📅 ᴇxᴀᴍᴘʟᴇ: <code>/add_premium 123456 1 month</code>\n"
-            "🧭 ᴀᴄᴄᴇᴘᴛᴇᴅ ꜰᴏʀᴍᴀᴛs: <code>1 day</code>, <code>1 hour</code>, <code>1 min</code>, <code>1 month</code>, <code>1 year</code>"
-            )
-
-@Client.on_message(filters.command("premium_users") & filters.user(config.ADMINS))
-async def premium_user(client, message):
-    aa = await message.reply_text("<i>ꜰᴇᴛᴄʜɪɴɢ...</i>")
-    new = f" ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀꜱ ʟɪꜱᴛ :\n\n"
-    user_count = 1
-    users = await db.get_all_users()
-    async for user in users:
-        data = await db.get_user(user['id'])
-        if data and data.get("expiry_time"):
-            expiry = data.get("expiry_time") 
-            expiry_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata"))
-            expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y\n⏱️ ᴇxᴘɪʀʏ ᴛɪᴍᴇ : %I:%M:%S %p")            
-            current_time = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
-            time_left = expiry_ist - current_time
-            days = time_left.days
-            hours, remainder = divmod(time_left.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            time_left_str = f"{days} days, {hours} hours, {minutes} minutes"	 
-            new += f"{user_count}. {(await client.get_users(user['id'])).mention}\n👤 ᴜꜱᴇʀ ɪᴅ : {user['id']}\n⏳ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}\n⏰ ᴛɪᴍᴇ ʟᴇꜰᴛ : {time_left_str}\n"
-            user_count += 1
-        else:
-            pass
-    try:    
-        await aa.edit_text(new)
-    except MessageTooLong:
-        with open('usersplan.txt', 'w+') as outfile:
-            outfile.write(new)
-        await message.reply_document('usersplan.txt', caption="Paid Users:")
-
-
-@Client.on_message(filters.command("plan"))
-async def plan(client, message):
-    user_id = message.from_user.id
-    users = message.from_user.mention
-    
-    btn = [[
-            InlineKeyboardButton('• ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ •', callback_data='buy_info'),
-        ],[
-            InlineKeyboardButton('• ʀᴇꜰᴇʀ ꜰʀɪᴇɴᴅꜱ', callback_data='reffff'),
-            InlineKeyboardButton('ꜰʀᴇᴇ ᴛʀɪᴀʟ •', callback_data='free')
-        ],[
-            InlineKeyboardButton('🚫 ᴄʟᴏꜱᴇ 🚫', callback_data='close_data')
-        ]]
-    msg = await message.reply_photo(
-        photo="https://graph.org/file/86da2027469565b5873d6.jpg",
-        caption=script.BPREMIUM_TXT,
-        reply_markup=InlineKeyboardMarkup(btn)
+@Client.on_message(filters.command("broadcast") & filters.user(config.ADMINS) & filters.private)
+async def broadcast_users(bot, message):
+    if not message.reply_to_message:
+        return await message.reply("<b>Reply to a message to broadcast.</b>",parse_mode=enums.ParseMode.HTML)
+    if lock.locked():
+        return await message.reply("⚠️ Another broadcast is in progress. Please wait...")
+    ask = await message.reply(
+        "<b>Do you want to pin this message in users?</b>",
+        reply_markup=ReplyKeyboardMarkup([["Yes", "No"]], one_time_keyboard=True, resize_keyboard=True)
     )
-    if config.PREMIUM_LOGS:
-        log_message = (
-            f"<b><u>🚫 ᴛʜɪs ᴜsᴇʀs ᴛʀʏ ᴛᴏ ᴄʜᴇᴄᴋ /plan</u>\n\n"
-            f"- ɪᴅ - `{user_id}`\n- ɴᴀᴍᴇ - {users}</b>")
-        await client.send_message(config.PREMIUM_LOGS, log_message)
-    await asyncio.sleep(300)
-    await msg.delete()
-    await message.delete()
-
-
-# Telegram Star Payment Method
-@Client.on_callback_query(filters.regex(r"buy_\d+"))
-async def premium_button(client, callback_query: CallbackQuery):
     try:
-        amount = int(callback_query.data.split("_")[1])
-        if amount in config.STAR_PREMIUM_PLANS:
+        user_response = await bot.listen(chat_id=message.chat.id, user_id=message.from_user.id, timeout=60)
+    except asyncio.TimeoutError:
+        await ask.delete()
+        return await message.reply("❌ Timed out. Broadcast cancelled.")
+    await ask.delete()
+    if user_response.text not in ("Yes", "No"):
+        return await message.reply("❌ Invalid input. Broadcast cancelled.")
+
+    is_pin = user_response.text == "Yes"
+    b_msg = message.reply_to_message
+    users = [user async for user in await db.get_all_users()]
+    total_users = len(users)
+    status_msg = await message.reply_text("📤 <b>Broadcasting your message...</b>")
+    success = blocked = deleted = failed = 0
+    start_time = time.time()
+    cancelled = False
+
+    async def send(user):
+        try:
+            _, result = await users_broadcast(int(user["id"]), b_msg, is_pin)
+            return result
+        except Exception as e:
+            logging.exception(f"Error sending broadcast to {user['id']}")
+            return "Error"
+
+    async with lock:
+        for i in range(0, total_users, 100):
+            if temp.B_USERS_CANCEL:
+                temp.B_USERS_CANCEL = False
+                cancelled = True
+                break
+            batch = users[i:i + 100]
+            results = await asyncio.gather(*[send(user) for user in batch])
+
+            for res in results:
+                if res == "Success":
+                    success += 1
+                elif res == "Blocked":
+                    blocked += 1
+                elif res == "Deleted":
+                    deleted += 1
+                elif res == "Error":
+                    failed += 1
+
+            done = i + len(batch)
+            elapsed = get_readable_time(time.time() - start_time)
+            await status_msg.edit(
+                f"📣 <b>Broadcast Progress....:</b>\n\n"
+                f"👥 Total: <code>{total_users}</code>\n"
+                f"✅ Done: <code>{done}</code>\n"
+                f"📬 Success: <code>{success}</code>\n"
+                f"⛔ Blocked: <code>{blocked}</code>\n"
+                f"🗑️ Deleted: <code>{deleted}</code>\n"
+                f"⏱️ Time: {elapsed}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ CANCEL", callback_data="broadcast_cancel#users")]
+                ])
+            )
+            await asyncio.sleep(0.1)
+    elapsed = get_readable_time(time.time() - start_time)
+    final_status = (
+        f"{'❌ <b>Broadcast Cancelled.</b>' if cancelled else '✅ <b>Broadcast Completed.</b>'}\n\n"
+        f"🕒 Time: {elapsed}\n"
+        f"👥 Total: <code>{total_users}</code>\n"
+        f"📬 Success: <code>{success}</code>\n"
+        f"⛔ Blocked: <code>{blocked}</code>\n"
+        f"🗑️ Deleted: <code>{deleted}</code>\n"
+        f"❌ Failed: <code>{failed}</code>"
+    )
+    await status_msg.edit(final_status)
+
+
+@Client.on_message(filters.command("grp_broadcast") & filters.user(config.ADMINS) & filters.private)
+async def broadcast_group(bot, message):
+    if not message.reply_to_message:
+        return await message.reply("<b>Reply to a message to group broadcast.</b>", parse_mode=enums.ParseMode.HTML)
+    ask = await message.reply(
+        "<b>Do you want to pin this message in groups?</b>",
+        reply_markup=ReplyKeyboardMarkup([["Yes", "No"]], one_time_keyboard=True, resize_keyboard=True)
+    )
+    try:
+        user_response = await bot.listen(chat_id=message.chat.id, user_id=message.from_user.id, timeout=60)
+    except asyncio.TimeoutError:
+        await ask.delete()
+        return await message.reply("❌ Timed out. Broadcast cancelled.")
+    await ask.delete()
+    if user_response.text not in ("Yes", "No"):
+        return await message.reply("❌ Invalid input. Broadcast cancelled.")
+
+    is_pin = user_response.text == "Yes"
+    b_msg = message.reply_to_message
+    chats = await db.get_all_chats()
+    total_chats = await db.total_chat_count()
+    status_msg = await message.reply_text("📤 <b>Broadcasting your message to groups...</b>")
+    start_time = time.time()
+    done = success = failed = 0
+    cancelled = False
+
+    async with lock:
+        async for chat in chats:
+            time_taken = get_readable_time(time.time() - start_time)
+            if temp.B_GROUPS_CANCEL:
+                temp.B_GROUPS_CANCEL = False
+                cancelled = True
+                break
             try:
-                buttons = [[	
-                    InlineKeyboardButton("ᴄᴀɴᴄᴇʟ 🚫", callback_data="close_data"),		    				
-                ]]
-                reply_markup = InlineKeyboardMarkup(buttons)
-                await client.send_invoice(
-                    chat_id=callback_query.message.chat.id,
-                    title="Premium Subscription",
-                    description=f"Pay {amount} Star And Get Premium For {config.STAR_PREMIUM_PLANS[amount]}",
-                    payload=f"torrentpremium_{amount}",
-                    currency="XTR",
-                    prices=[
-                        LabeledPrice(
-                            label="Premium Subscription", 
-                            amount=amount
-                        ) 
-                    ],
-                    reply_markup=reply_markup
-                )
-                await callback_query.answer()
+                sts = await groups_broadcast(int(chat['id']), b_msg, is_pin)
             except Exception as e:
-                print(f"Error sending invoice: {e}")
-                await callback_query.answer("🚫 Error Processing Your Payment. Try again.", show_alert=True)
-        else:
-            await callback_query.answer("⚠️ Invalid Premium Package.", show_alert=True)
-    except Exception as e:
-        print(f"Error In buy_ - {e}")
- 
-@Client.on_pre_checkout_query()
-async def pre_checkout_handler(client, query: PreCheckoutQuery):
-    try:
-        if query.payload.startswith("torrentpremium_"):
-            await query.answer(success=True)
-        else:
-            await query.answer(success=False, error_message="⚠️ Invalid Purchase Type.", show_alert=True)
-    except Exception as e:
-        print(f"Pre-checkout error: {e}")
-        await query.answer(success=False, error_message="🚫 Unexpected Error Occurred." , show_alert=True)
-
-@Client.on_message(filters.successful_payment)
-async def successful_premium_payment(client, message):
-    try:
-        amount = int(message.successful_payment.total_amount)
-        user_id = message.from_user.id
-        user = message.from_user
-        time_zone = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
-        current_time = time_zone.strftime("%d-%m-%Y | %I:%M:%S %p") 
-        if amount in config.STAR_PREMIUM_PLANS:
-            time = config.STAR_PREMIUM_PLANS[amount]
-            seconds = await get_seconds(time)
-            if seconds > 0:
-                expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-                user_data = {"id": user_id, "expiry_time": expiry_time}
-                await db.update_user(user_data)
-                data = await db.get_user(user_id)
-                expiry = data.get("expiry_time")
-                expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y | %I:%M:%S %p")    
-                await message.reply(text=f"Thankyou For Purchasing Premium Service Using Star ✅\n\nSubscribtion Time - {time}\nExpire In - {expiry_str_in_ist}", disable_web_page_preview=True)                
-                if config.PREMIUM_LOGS:
-                    await client.send_message(config.PREMIUM_LOGS, text=f"#Purchase_Premium_With_Start\n\n👤 ᴜꜱᴇʀ - {user.mention}\n\n⚡ ᴜꜱᴇʀ ɪᴅ - <code>{user_id}</code>\n\n🚫 ꜱᴛᴀʀ ᴘᴀʏ - {amount}⭐\n\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ - {time}\n\n⌛️ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ - {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ - {expiry_str_in_ist}", disable_web_page_preview=True)
+                logging.exception(f"Error broadcasting to group {chat['id']}")
+                sts = 'Error'
+            if sts == "Success":
+                success += 1
             else:
-                await message.reply("⚠️ Invalid Premium Time.")
-        else:
-            await message.reply("⚠️ Invalid Premium Package.")
-    except Exception as e:
-        print(f"Error Processing Premium Payment: {e}")
-        await message.reply("✅ Thank You For Your Payment! (Error Logging Details)")
-
-@Client.on_callback_query(filters.regex("^premium_info$"))
-async def premium_info_callback(client, callback_query):
-    """Show premium plans"""
-    buttons = [
-        [InlineKeyboardButton(f"7 Days - 50⭐", callback_data="buy_50")],
-        [InlineKeyboardButton(f"1 Month - 100⭐", callback_data="buy_100")],
-        [InlineKeyboardButton(f"3 Months - 250⭐", callback_data="buy_250")],
-        [InlineKeyboardButton(f"6 Months - 500⭐", callback_data="buy_500")],
-        [InlineKeyboardButton(f"1 Year - 1000⭐", callback_data="buy_1000")],
-        [InlineKeyboardButton("🔙 Back", callback_data="start")]
-    ]
-    
-    await callback_query.message.edit_text(
-        script.BPREMIUM_TXT,
-        reply_markup=InlineKeyboardMarkup(buttons)
+                failed += 1
+            done += 1
+            if done % 10 == 0:
+                btn = [[InlineKeyboardButton("❌ CANCEL", callback_data="broadcast_cancel#groups")]]
+                await status_msg.edit(
+                    f"📣 <b>Group broadcast progress:</b>\n\n"
+                    f"👥 Total Groups: <code>{total_chats}</code>\n"
+                    f"✅ Completed: <code>{done} / {total_chats}</code>\n"
+                    f"📬 Success: <code>{success}</code>\n"
+                    f"❌ Failed: <code>{failed}</code>",
+                    reply_markup=InlineKeyboardMarkup(btn)
+                )
+    time_taken = get_readable_time(time.time() - start_time)
+    text = (
+        f"{'❌ <b>Groups broadcast cancelled!</b>' if cancelled else '✅ <b>Group broadcast completed.</b>'}\n"
+        f"⏱️ Completed in {time_taken}\n\n"
+        f"👥 Total Groups: <code>{total_chats}</code>\n"
+        f"✅ Completed: <code>{done} / {total_chats}</code>\n"
+        f"📬 Success: <code>{success}</code>\n"
+        f"❌ Failed: <code>{failed}</code>"
     )
+    try:
+        await status_msg.edit(text)
+    except MessageTooLong:
+        with open("reason.txt", "w+") as outfile:
+            outfile.write(str(failed))
+        await message.reply_document(
+            "reason.txt", caption=text
+        )
+        os.remove("reason.txt")
 
-@Client.on_callback_query(filters.regex("^(buy_info|reffff|free)$"))
-async def dummy_callbacks(client, callback_query):
-    """Handle placeholder callbacks"""
-    await callback_query.answer("This feature is coming soon!", show_alert=True)
+@Client.on_message(filters.command("clear_junk") & filters.user(config.ADMINS))
+async def remove_junkuser__db(bot, message):
+    users = await db.get_all_users()
+    b_msg = message 
+    sts = await message.reply_text('ɪɴ ᴘʀᴏɢʀᴇss.... ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ')   
+    start_time = time.time()
+    total_users = await db.total_users_count()
+    blocked = 0
+    deleted = 0
+    failed = 0
+    done = 0
+    async for user in users:
+        pti, sh = await clear_junk(int(user['id']), b_msg)
+        if pti == False:
+            if sh == "Blocked":
+                blocked+=1
+            elif sh == "Deleted":
+                deleted += 1
+            elif sh == "Error":
+                failed += 1
+        done += 1
+        if not done % 50:
+            await sts.edit(f"In Progress:\n\nTotal Users {total_users}\nCompleted: {done} / {total_users}\nBlocked: {blocked}\nDeleted: {deleted}")    
+    time_taken = datetime.timedelta(seconds=int(time.time()-start_time))
+    await sts.delete()
+    await bot.send_message(message.chat.id, f"Completed:\nCompleted in {time_taken} seconds.\n\nTotal Users {total_users}\nCompleted: {done} / {total_users}\nBlocked: {blocked}\nDeleted: {deleted}")
+
+@Client.on_message(filters.command(["junk_group", "clear_junk_group"]) & filters.user(config.ADMINS))
+async def junk_clear_group(bot, message):
+    groups = await db.get_all_chats()
+    if not groups:
+        grp = await message.reply_text("❌ Nᴏ ɢʀᴏᴜᴘs ғᴏᴜɴᴅ ғᴏʀ ᴄʟᴇᴀʀ Jᴜɴᴋ ɢʀᴏᴜᴘs.")
+        await asyncio.sleep(60)
+        await grp.delete()
+        return
+    b_msg = message
+    sts = await message.reply_text(text='..............')
+    start_time = time.time()
+    total_groups = await db.total_chat_count()
+    done = 0
+    failed = ""
+    deleted = 0
+    async for group in groups:
+        pti, sh, ex = await junk_group(int(group['id']), b_msg)        
+        if pti == False:
+            if sh == "deleted":
+                deleted+=1 
+                failed += ex 
+                try:
+                    await bot.leave_chat(int(group['id']))
+                except Exception as e:
+                    print(f"{e} > {group['id']}")  
+        done += 1
+        if not done % 50:
+            await sts.edit(f"in progress:\n\nTotal Groups {total_groups}\nCompleted: {done} / {total_groups}\nDeleted: {deleted}")    
+    time_taken = datetime.timedelta(seconds=int(time.time()-start_time))
+    await sts.delete()
+    try:
+        await bot.send_message(message.chat.id, f"Completed:\nCompleted in {time_taken} seconds.\n\nTotal Groups {total_groups}\nCompleted: {done} / {total_groups}\nDeleted: {deleted}\n\nFiled Reson:- {failed}")    
+    except MessageTooLong:
+        with open('junk.txt', 'w+') as outfile:
+            outfile.write(failed)
+        await message.reply_document('junk.txt', caption=f"Completed:\nCompleted in {time_taken} seconds.\n\nTotal Groups {total_groups}\nCompleted: {done} / {total_groups}\nDeleted: {deleted}")
+        os.remove("junk.txt")
