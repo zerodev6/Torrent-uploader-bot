@@ -1,16 +1,24 @@
 import pytz
 import datetime
 from Script import script 
-from config import config
-from utils import get_seconds
+from info import *
+from utils import get_seconds, temp
 from database.users_chats_db import db 
 import asyncio
 from pyrogram import Client, filters 
 from pyrogram.errors.exceptions.bad_request_400 import MessageTooLong
 from pyrogram.types import *
 
+# Try to import PreCheckoutQueryHandler, but fallback if not available
+try:
+    from pyrogram.handlers import PreCheckoutQueryHandler
+    PRE_CHECKOUT_AVAILABLE = True
+except ImportError:
+    PRE_CHECKOUT_AVAILABLE = False
+    print("Warning: PreCheckoutQueryHandler not available. Payment features disabled.")
 
-@Client.on_message(filters.command("remove_premium") & filters.user(config.ADMINS))
+
+@Client.on_message(filters.command("remove_premium") & filters.user(ADMINS))
 async def remove_premium(client, message):
     if len(message.command) == 2:
         user_id = int(message.command[1])
@@ -55,7 +63,7 @@ async def myplan(client, message):
             )
 
             await message.reply_photo(
-                photo=config.SUBSCRIPTION, 
+                photo=SUBSCRIPTION, 
                 caption=caption,
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("🔥 ᴇxᴛᴇɴᴅ ᴘʟᴀɴ", callback_data="premium_info")]]
@@ -76,7 +84,7 @@ async def myplan(client, message):
     except Exception as e:
         print(e)
 
-@Client.on_message(filters.command("get_premium") & filters.user(config.ADMINS))
+@Client.on_message(filters.command("get_premium") & filters.user(ADMINS))
 async def get_premium(client, message):
     if len(message.command) == 2:
         user_id = int(message.command[1])
@@ -98,7 +106,7 @@ async def get_premium(client, message):
     else:
         await message.reply_text("ᴜꜱᴀɢᴇ : /get_premium user_id")
 
-@Client.on_message(filters.command("add_premium") & filters.user(config.ADMINS))
+@Client.on_message(filters.command("add_premium") & filters.user(ADMINS))
 async def give_premium_cmd_handler(client, message):
     if len(message.command) == 4:
         time_zone = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
@@ -119,8 +127,8 @@ async def give_premium_cmd_handler(client, message):
                 chat_id=user_id,
                 text=f"👋 ʜᴇʏ {user.mention},\nᴛʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ.\nᴇɴᴊᴏʏ !! ✨🎉\n\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True              
             )    
-            if config.PREMIUM_LOGS:
-                await client.send_message(config.PREMIUM_LOGS, text=f"#Added_Premium\n\n👤 ᴜꜱᴇʀ : {user.mention}\n⚡ ᴜꜱᴇʀ ɪᴅ : <code>{user_id}</code>\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True)
+            if PREMIUM_LOGS:
+                await client.send_message(PREMIUM_LOGS, text=f"#Added_Premium\n\n👤 ᴜꜱᴇʀ : {user.mention}\n⚡ ᴜꜱᴇʀ ɪᴅ : <code>{user_id}</code>\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ : <code>{time}</code>\n\n⏳ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ : {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ : {expiry_str_in_ist}", disable_web_page_preview=True)
                     
         else:
             await message.reply_text(
@@ -134,7 +142,7 @@ async def give_premium_cmd_handler(client, message):
             "🧭 ᴀᴄᴄᴇᴘᴛᴇᴅ ꜰᴏʀᴍᴀᴛs: <code>1 day</code>, <code>1 hour</code>, <code>1 min</code>, <code>1 month</code>, <code>1 year</code>"
             )
 
-@Client.on_message(filters.command("premium_users") & filters.user(config.ADMINS))
+@Client.on_message(filters.command("premium_users") & filters.user(ADMINS))
 async def premium_user(client, message):
     aa = await message.reply_text("<i>ꜰᴇᴛᴄʜɪɴɢ...</i>")
     new = f" ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀꜱ ʟɪꜱᴛ :\n\n"
@@ -168,7 +176,9 @@ async def premium_user(client, message):
 async def plan(client, message):
     user_id = message.from_user.id
     users = message.from_user.mention
-    
+    log_message = (
+        f"<b><u>🚫 ᴛʜɪs ᴜsᴇʀs ᴛʀʏ ᴛᴏ ᴄʜᴇᴄᴋ /plan</u> {temp.B_LINK}\n\n"
+        f"- ɪᴅ - `{user_id}`\n- ɴᴀᴍᴇ - {users}</b>")
     btn = [[
             InlineKeyboardButton('• ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ •', callback_data='buy_info'),
         ],[
@@ -182,11 +192,8 @@ async def plan(client, message):
         caption=script.BPREMIUM_TXT,
         reply_markup=InlineKeyboardMarkup(btn)
     )
-    if config.PREMIUM_LOGS:
-        log_message = (
-            f"<b><u>🚫 ᴛʜɪs ᴜsᴇʀs ᴛʀʏ ᴛᴏ ᴄʜᴇᴄᴋ /plan</u>\n\n"
-            f"- ɪᴅ - `{user_id}`\n- ɴᴀᴍᴇ - {users}</b>")
-        await client.send_message(config.PREMIUM_LOGS, log_message)
+    if PREMIUM_LOGS:
+        await client.send_message(PREMIUM_LOGS, log_message)
     await asyncio.sleep(300)
     await msg.delete()
     await message.delete()
@@ -197,84 +204,104 @@ async def plan(client, message):
 async def premium_button(client, callback_query: CallbackQuery):
     try:
         amount = int(callback_query.data.split("_")[1])
-        if amount in config.STAR_PREMIUM_PLANS:
-            try:
-                buttons = [[	
-                    InlineKeyboardButton("ᴄᴀɴᴄᴇʟ 🚫", callback_data="close_data"),		    				
-                ]]
-                reply_markup = InlineKeyboardMarkup(buttons)
-                await client.send_invoice(
-                    chat_id=callback_query.message.chat.id,
-                    title="Premium Subscription",
-                    description=f"Pay {amount} Star And Get Premium For {config.STAR_PREMIUM_PLANS[amount]}",
-                    payload=f"torrentpremium_{amount}",
-                    currency="XTR",
-                    prices=[
-                        LabeledPrice(
-                            label="Premium Subscription", 
-                            amount=amount
-                        ) 
-                    ],
-                    reply_markup=reply_markup
+        if amount in STAR_PREMIUM_PLANS:
+            if PRE_CHECKOUT_AVAILABLE:
+                try:
+                    buttons = [[	
+                        InlineKeyboardButton("ᴄᴀɴᴄᴇʟ 🚫", callback_data="close_data"),		    				
+                    ]]
+                    reply_markup = InlineKeyboardMarkup(buttons)
+                    await client.send_invoice(
+                        chat_id=callback_query.message.chat.id,
+                        title="Premium Subscription",
+                        description=f"Pay {amount} Star And Get Premium For {STAR_PREMIUM_PLANS[amount]}",
+                        payload=f"unzippremium_{amount}",
+                        currency="XTR",
+                        prices=[
+                            LabeledPrice(
+                                label="Premium Subscription", 
+                                amount=amount
+                            ) 
+                        ],
+                        reply_markup=reply_markup
+                    )
+                    await callback_query.answer()
+                except Exception as e:
+                    print(f"Error sending invoice: {e}")
+                    await callback_query.answer("🚫 Error Processing Your Payment. Try again.", show_alert=True)
+            else:
+                # Fallback when payment handler is not available
+                admin_mention = f"@{ADMINS[0]}" if ADMINS and len(ADMINS) > 0 else "the admin"
+                await callback_query.answer(
+                    f"⚠️ Online payments are temporarily unavailable.\n\n"
+                    f"Please contact {admin_mention} manually for premium subscription.\n"
+                    f"Plan: {STAR_PREMIUM_PLANS[amount]} for {amount} Stars",
+                    show_alert=True
                 )
-                await callback_query.answer()
-            except Exception as e:
-                print(f"Error sending invoice: {e}")
-                await callback_query.answer("🚫 Error Processing Your Payment. Try again.", show_alert=True)
         else:
             await callback_query.answer("⚠️ Invalid Premium Package.", show_alert=True)
     except Exception as e:
         print(f"Error In buy_ - {e}")
- 
-@Client.on_pre_checkout_query()
-async def pre_checkout_handler(client, query: PreCheckoutQuery):
+
+
+# Pre-checkout query handler - only if available
+async def pre_checkout_handler(client, query):
     try:
-        if query.payload.startswith("torrentpremium_"):
-            await query.answer(success=True)
+        if query.invoice_payload.startswith("unzippremium_"):
+            await query.answer(ok=True)
         else:
-            await query.answer(success=False, error_message="⚠️ Invalid Purchase Type.", show_alert=True)
+            await query.answer(ok=False, error_message="⚠️ Invalid Purchase Type.")
     except Exception as e:
         print(f"Pre-checkout error: {e}")
-        await query.answer(success=False, error_message="🚫 Unexpected Error Occurred." , show_alert=True)
+        await query.answer(ok=False, error_message="🚫 Unexpected Error Occurred.")
 
-@Client.on_message(filters.successful_payment)
-async def successful_premium_payment(client, message):
-    try:
-        amount = int(message.successful_payment.total_amount)
-        user_id = message.from_user.id
-        user = message.from_user
-        time_zone = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
-        current_time = time_zone.strftime("%d-%m-%Y | %I:%M:%S %p") 
-        if amount in config.STAR_PREMIUM_PLANS:
-            time = config.STAR_PREMIUM_PLANS[amount]
-            seconds = await get_seconds(time)
-            if seconds > 0:
-                expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-                user_data = {"id": user_id, "expiry_time": expiry_time}
-                await db.update_user(user_data)
-                data = await db.get_user(user_id)
-                expiry = data.get("expiry_time")
-                expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y | %I:%M:%S %p")    
-                await message.reply(text=f"Thankyou For Purchasing Premium Service Using Star ✅\n\nSubscribtion Time - {time}\nExpire In - {expiry_str_in_ist}", disable_web_page_preview=True)                
-                if config.PREMIUM_LOGS:
-                    await client.send_message(config.PREMIUM_LOGS, text=f"#Purchase_Premium_With_Start\n\n👤 ᴜꜱᴇʀ - {user.mention}\n\n⚡ ᴜꜱᴇʀ ɪᴅ - <code>{user_id}</code>\n\n🚫 ꜱᴛᴀʀ ᴘᴀʏ - {amount}⭐\n\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ - {time}\n\n⌛️ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ - {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ - {expiry_str_in_ist}", disable_web_page_preview=True)
-            else:
-                await message.reply("⚠️ Invalid Premium Time.")
-        else:
-            await message.reply("⚠️ Invalid Premium Package.")
-    except Exception as e:
-        print(f"Error Processing Premium Payment: {e}")
-        await message.reply("✅ Thank You For Your Payment! (Error Logging Details)")
+
+# Register the handler at module level - only if available
+def register_pre_checkout_handler(client):
+    """This function should be called from bot.py after client initialization"""
+    if PRE_CHECKOUT_AVAILABLE:
+        client.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
+    else:
+        print("PreCheckoutQueryHandler not available. Payment features disabled.")
+
+
+# FIX: Comment out the problematic successful_payment decorator for now
+# In Pyrogram v2.x, successful_payment filter might not be available or has a different name
+# @Client.on_message(filters.successful_payment)
+# async def successful_premium_payment(client, message):
+#     try:
+#         amount = int(message.successful_payment.total_amount)
+#         user_id = message.from_user.id
+#         time_zone = datetime.datetime.now(pytz.timezone("Asia/Kolkata"))
+#         current_time = time_zone.strftime("%d-%m-%Y | %I:%M:%S %p") 
+#         if amount in STAR_PREMIUM_PLANS:
+#             time = STAR_PREMIUM_PLANS[amount]
+#             seconds = await get_seconds(time)
+#             if seconds > 0:
+#                 expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+#                 user_data = {"id": user_id, "expiry_time": expiry_time}
+#                 await db.update_user(user_data)
+#                 data = await db.get_user(user_id)
+#                 expiry = data.get("expiry_time")
+#                 expiry_str_in_ist = expiry.astimezone(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y | %I:%M:%S %p")    
+#                 await message.reply(text=f"Thank you For Purchasing Premium Service Using Star ✅\n\nSubscription Time - {time}\nExpire In - {expiry_str_in_ist}", disable_web_page_preview=True)                
+#                 if PREMIUM_LOGS:
+#                     await client.send_message(PREMIUM_LOGS, text=f"#Purchase_Premium_With_Star\n\n👤 ᴜꜱᴇʀ - {message.from_user.mention}\n\n⚡ ᴜꜱᴇʀ ɪᴅ - <code>{user_id}</code>\n\n⭐ ꜱᴛᴀʀ ᴘᴀʏ - {amount}⭐\n\n⏰ ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇꜱꜱ - {time}\n\n⌛️ ᴊᴏɪɴɪɴɢ ᴅᴀᴛᴇ - {current_time}\n\n⌛️ ᴇxᴘɪʀʏ ᴅᴀᴛᴇ - {expiry_str_in_ist}", disable_web_page_preview=True)
+#             else:
+#                 await message.reply("⚠️ Invalid Premium Time.")
+#         else:
+#             await message.reply("⚠️ Invalid Premium Package.")
+#     except Exception as e:
+#         print(f"Error Processing Premium Payment: {e}")
+#         await message.reply("✅ Thank You For Your Payment! (Error Logging Details)")
 
 @Client.on_callback_query(filters.regex("^premium_info$"))
 async def premium_info_callback(client, callback_query):
-    """Show premium plans"""
     buttons = [
-        [InlineKeyboardButton(f"7 Days - 50⭐", callback_data="buy_50")],
-        [InlineKeyboardButton(f"1 Month - 100⭐", callback_data="buy_100")],
-        [InlineKeyboardButton(f"3 Months - 250⭐", callback_data="buy_250")],
-        [InlineKeyboardButton(f"6 Months - 500⭐", callback_data="buy_500")],
-        [InlineKeyboardButton(f"1 Year - 1000⭐", callback_data="buy_1000")],
+        [InlineKeyboardButton("💳 100⭐ - 1 Month", callback_data="buy_100")],
+        [InlineKeyboardButton("💳 250⭐ - 3 Months", callback_data="buy_250")],
+        [InlineKeyboardButton("💳 400⭐ - 6 Months", callback_data="buy_400")],
+        [InlineKeyboardButton("💳 700⭐ - 1 Year", callback_data="buy_700")],
         [InlineKeyboardButton("🔙 Back", callback_data="start")]
     ]
     
@@ -283,7 +310,26 @@ async def premium_info_callback(client, callback_query):
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
-@Client.on_callback_query(filters.regex("^(buy_info|reffff|free)$"))
-async def dummy_callbacks(client, callback_query):
-    """Handle placeholder callbacks"""
-    await callback_query.answer("This feature is coming soon!", show_alert=True)
+@Client.on_callback_query(filters.regex("^buy_info$"))
+async def buy_info_callback(client, callback_query):
+    buttons = [
+        [InlineKeyboardButton("💳 100⭐ - 1 Month", callback_data="buy_100")],
+        [InlineKeyboardButton("💳 250⭐ - 3 Months", callback_data="buy_250")],
+        [InlineKeyboardButton("💳 400⭐ - 6 Months", callback_data="buy_400")],
+        [InlineKeyboardButton("💳 700⭐ - 1 Year", callback_data="buy_700")],
+        [InlineKeyboardButton("🔙 Back", callback_data="start")]
+    ]
+    
+    await callback_query.message.edit_text(
+        script.BPREMIUM_TXT,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+@Client.on_callback_query(filters.regex("^(reffff|free|close_data)$"))
+async def other_callbacks(client, callback_query):
+    if callback_query.data == "close_data":
+        await callback_query.message.delete()
+    elif callback_query.data == "reffff":
+        await callback_query.answer("Referral system coming soon!", show_alert=True)
+    elif callback_query.data == "free":
+        await callback_query.answer("Free trial coming soon!", show_alert=True)
