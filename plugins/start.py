@@ -19,7 +19,7 @@ async def start_command(client, message):
         return
     
     # Send ⏳ emoji animation
-    loading_msg = await message.reply("⏳")
+    loading_msg = await message.reply("⚡")
     await asyncio.sleep(2)
     await loading_msg.delete()
     
@@ -43,14 +43,19 @@ async def start_command(client, message):
             InlineKeyboardButton("💎 Premium", callback_data="premium_info")
         ],
         [
+            InlineKeyboardButton("📢 Update Channel", url="https://t.me/zerodev2")
+        ],
+        [
             InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{config.OWNER_USERNAME.replace('@', '')}")
         ]
     ]
     
+    # Send welcome message as reply to /start command
     await message.reply_photo(
         photo=image_url,
         caption=script.START_TXT.format(message.from_user.mention),
-        reply_markup=InlineKeyboardMarkup(buttons)
+        reply_markup=InlineKeyboardMarkup(buttons),
+        reply_to_message_id=message.id
     )
 
 @Client.on_message(filters.command("start") & filters.group)
@@ -65,6 +70,9 @@ async def group_start(client, message):
         [
             InlineKeyboardButton("✨ Help", callback_data="help"),
             InlineKeyboardButton("💎 Premium", callback_data="premium_info")
+        ],
+        [
+            InlineKeyboardButton("📢 Update Channel", url="https://t.me/zerodev2")
         ]
     ]
     
@@ -148,6 +156,9 @@ async def start_callback(client, callback_query):
         ],
         [
             InlineKeyboardButton("💎 Premium", callback_data="premium_info")
+        ],
+        [
+            InlineKeyboardButton("📢 Update Channel", url="https://t.me/zerodev2")
         ],
         [
             InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{config.OWNER_USERNAME.replace('@', '')}")
