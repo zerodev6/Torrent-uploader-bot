@@ -7,3 +7,4 @@ psutil
 libtorrent
 requests
 aiofiles
+aiohttp
